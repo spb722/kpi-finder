@@ -8,6 +8,15 @@ from kpi_finder.state import ConditionState
 _TOP_K = int(os.environ.get("VECTOR_TOP_K", 5))
 _MAX_GROUP_ATTEMPTS = int(os.environ.get("MAX_GROUP_ATTEMPTS", 3))
 
+_ALLOWED_GROUPS = {
+    "Profile_Cdr_group",
+    "Common_Seg_Fct",
+    "Recharge_Seg_Fct",
+    "AUDIENCE_SEGMENT_CDR",
+    "LIFECYCLE_CDR",
+    "Instant_cdr_group",
+    "Subscriptions",
+}
 
 @traceable(name="group_route_v2")
 def group_route_v2(state: ConditionState) -> ConditionState:
@@ -15,19 +24,30 @@ def group_route_v2(state: ConditionState) -> ConditionState:
     condition = state["condition"]
     raw = vector_search("Group_detail_v2", condition, top_k=_TOP_K)
 
-    ranked_groups = [
-        {
-            "group_name": r["name"],
+    ranked_groups = []
+    skipped_groups = []
+
+    for r in raw:
+        group_name = r["name"]
+
+        if group_name not in _ALLOWED_GROUPS:
+            skipped_groups.append({
+                "group_name": group_name,
+                "reason": "Group is not enabled for feature search.",
+            })
+            continue
+
+        ranked_groups.append({
+            "group_name": group_name,
             "score": r["score"],
             "content": r["content"],
             "metadata": r["metadata"],
-        }
-        for r in raw
-    ]
+        })
 
     return {
         "ranked_groups": ranked_groups,
         "attempted_groups": [],
+        "skipped_groups": skipped_groups,
     }
 
 
